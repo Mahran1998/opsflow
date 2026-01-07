@@ -2,6 +2,8 @@ using System.Text.Json.Serialization;
 using OpsFlow.Api.Contracts;
 using OpsFlow.Api.Domain;
 using OpsFlow.Api.Services;
+using Microsoft.EntityFrameworkCore;
+using OpsFlow.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +15,18 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddSingleton<IRequestService, InMemoryRequestService>();
+var saPassword = builder.Configuration["MSSQL_SA_PASSWORD"];
+if (string.IsNullOrWhiteSpace(saPassword))
+    throw new InvalidOperationException("MSSQL_SA_PASSWORD is required. Run: set -a; source .env; set +a");
+
+var connStr =
+    $"Server=localhost,1433;Database=OpsFlowDb;User Id=sa;Password={saPassword};TrustServerCertificate=True;Encrypt=False;";
+
+builder.Services.AddDbContext<OpsFlowDbContext>(opt =>
+    opt.UseSqlServer(connStr, sql => sql.EnableRetryOnFailure()));
+
+builder.Services.AddScoped<IRequestService, EfRequestService>();
+
 
 var app = builder.Build();
 
@@ -61,6 +74,13 @@ app.MapGet("/requests/{id:int}", (int id, IRequestService service) =>
         ? Results.NotFound(new { message = $"Request {id} not found." })
         : Results.Ok(ToDto(item));
 });
+
+app.MapGet("/health/db", async (OpsFlowDbContext db) =>
+{
+    var canConnect = await db.Database.CanConnectAsync();
+    return Results.Ok(new { canConnect });
+});
+
 
 app.MapPatch("/requests/{id:int}", (int id, UpdateRequestDto dto, IRequestService service) =>
 {
