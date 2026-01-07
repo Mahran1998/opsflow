@@ -1,0 +1,15 @@
+.env
+
+# .NET
+bin/
+obj/
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# IDE
+.vscode/
+.idea/
